@@ -1,0 +1,5 @@
+* text=auto
+# Executed inside Linux containers: must keep LF endings on every platform.
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf

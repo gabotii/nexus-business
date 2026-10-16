@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Domain\Nexus.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- EF Core abstractions only (ADR-0001): DbSet/LINQ in use cases, no provider and no generic repositories. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nexus.Infrastructure" />
+    <InternalsVisibleTo Include="Nexus.UnitTests" />
+    <InternalsVisibleTo Include="Nexus.IntegrationTests" />
+  </ItemGroup>
+</Project>

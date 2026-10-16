@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Same role split as production (ADR-0010): an owner with CREATEDB for the throw-away test databases and the
+      # unprivileged runtime role the API connects with.
+      NEXUS_TEST_DB_OWNER: Host=localhost;Port=5432;Username=nexus;Password=nexus_ci;Database=postgres
+      NEXUS_TEST_DB_APP_PASSWORD: nexus_app_ci
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Create database roles
+        env:
+          PGPASSWORD: postgres_ci
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE nexus LOGIN CREATEDB PASSWORD 'nexus_ci';
+          CREATE ROLE nexus_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'nexus_app_ci';
+          SQL
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release
+      - name: Migrations are in sync with the model
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            -p src/Nexus.Infrastructure -s src/Nexus.Api --no-build --configuration Release
+      - name: No known-vulnerable packages
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
+          ! grep -q "has the following vulnerable packages" vulnerable.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: No high or critical advisories in runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure the stack
+        run: |
+          {
+            echo "POSTGRES_SUPERUSER_PASSWORD=$(openssl rand -hex 24)"
+            echo "DB_OWNER_PASSWORD=$(openssl rand -hex 24)"
+            echo "DB_APP_PASSWORD=$(openssl rand -hex 24)"
+            echo "PRODUCT_NAME=Nexus Business"
+            echo "WEB_PORT=8080"
+            echo "RATE_LIMIT_PER_IP_PER_MINUTE=100000"
+            echo "RATE_LIMIT_CREDENTIALS_PER_MINUTE=100000"
+            echo "PUBLIC_BASE_URL=http://localhost:8080"
+            echo "COMPOSE_PROFILES=mailpit"
+            echo "EMAIL_FROM=no-reply@example.com"
+            echo "SMTP_HOST=mailpit"
+            echo "SMTP_PORT=1025"
+            echo "SMTP_ENABLE_SSL=false"
+          } > .env
+      - run: docker compose up -d --build --wait
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          E2E_BASE_URL=http://localhost:8080 E2E_MAILPIT_URL=http://127.0.0.1:8025 npm run e2e
+      - if: failure()
+        run: docker compose logs
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: frontend/test-results

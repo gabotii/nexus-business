@@ -1,0 +1,105 @@
+# Full stack: PostgreSQL + one-shot migration + API + web (nginx). Usage:
+#   cp .env.example .env    # then replace every secret
+#   docker compose up -d --build --wait
+# The app is served at http://localhost:${WEB_PORT} (API under /api). Only the web container publishes a port.
+name: nexus-business
+
+x-api-image: &api-image
+  build: ./backend
+  image: nexus-business/api:local
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      NEXUS_DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?Set DB_OWNER_PASSWORD in .env}
+      NEXUS_DB_APP_PASSWORD: ${DB_APP_PASSWORD:?Set DB_APP_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP on purpose: during first-run initialisation the server only listens on the Unix socket.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d nexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Applies pending migrations as the schema owner, then exits. The API never migrates in Production (ADR-0010).
+  migrate:
+    <<: *api-image
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Migrations: Host=db;Port=5432;Database=nexus;Username=nexus;Password=${DB_OWNER_PASSWORD};GSS Encryption Mode=Disable
+
+  api:
+    <<: *api-image
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Default: Host=db;Port=5432;Database=nexus;Username=nexus_app;Password=${DB_APP_PASSWORD};GSS Encryption Mode=Disable
+      Branding__ProductName: ${PRODUCT_NAME:-Nexus Business}
+      # Only nginx can reach the API (no published port), so its forwarded headers are trusted.
+      ForwardedHeaders__Enabled: "true"
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      RateLimiting__PerIpPerMinute: ${RATE_LIMIT_PER_IP_PER_MINUTE:-600}
+      RateLimiting__CredentialsPerIpPerMinute: ${RATE_LIMIT_CREDENTIALS_PER_MINUTE:-10}
+      # Links in e-mails (verification, password reset, invitations) point here.
+      App__PublicBaseUrl: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL in .env}
+      Email__Delivery: Smtp
+      Email__From: ${EMAIL_FROM:?Set EMAIL_FROM in .env}
+      Email__SmtpHost: ${SMTP_HOST:?Set SMTP_HOST in .env}
+      Email__SmtpPort: ${SMTP_PORT:-587}
+      Email__SmtpUsername: ${SMTP_USERNAME:-}
+      Email__SmtpPassword: ${SMTP_PASSWORD:-}
+      Email__SmtpEnableSsl: ${SMTP_ENABLE_SSL:-true}
+      # Session tickets and e-mail tokens are encrypted with these keys: losing them signs everybody out.
+      DataProtection__KeysPath: /keys
+    volumes:
+      - dpkeys:/keys
+    expose:
+      - "8080"
+
+  # Local SMTP catcher (web UI on http://127.0.0.1:${MAILPIT_UI_PORT:-8025}). Enabled with COMPOSE_PROFILES=mailpit; real
+  # deployments point SMTP_HOST at their provider and leave the profile off.
+  mailpit:
+    image: axllent/mailpit:v1.27.0
+    profiles: [mailpit]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_PRODUCT_NAME: ${PRODUCT_NAME:-Nexus Business}
+    image: nexus-business/web:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  pgdata:
+  dpkeys:

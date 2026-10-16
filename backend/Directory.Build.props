@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- CS1591: XML docs are not required for every public member.
+         CA1848/CA1873: LoggerMessage source generators are not worth it for the few log calls in this API.
+         CA1515: types in an executable/test project may be public (xUnit, WebApplicationFactory need it).
+         CA1707: test method names use underscores.
+         CA2007: ASP.NET Core has no synchronization context; ConfigureAwait adds noise only. -->
+    <NoWarn>$(NoWarn);CS1591;CA1848;CA1873;CA1515;CA1707;CA2007</NoWarn>
+  </PropertyGroup>
+</Project>

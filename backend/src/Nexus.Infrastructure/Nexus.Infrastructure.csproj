@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Application\Nexus.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Identity, health checks and Data Protection live in the shared framework. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nexus.Api" />
+    <InternalsVisibleTo Include="Nexus.UnitTests" />
+    <InternalsVisibleTo Include="Nexus.IntegrationTests" />
+  </ItemGroup>
+</Project>
