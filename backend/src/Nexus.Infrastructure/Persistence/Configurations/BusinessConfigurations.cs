@@ -31,7 +31,9 @@ internal sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         b.HasAlternateKey(c => new { c.TenantId, c.Id });
         b.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
         b.Property(c => c.Kind).HasConversion<string>().HasMaxLength(16);
-        b.Property(c => c.Name).HasMaxLength(Customer.NameMaxLength).IsRequired();
+        // Explicit ICU collation: the server default differs per machine (byte order on Linux CI), so listings sorted
+        // by name would change order between environments.
+        b.Property(c => c.Name).HasMaxLength(Customer.NameMaxLength).IsRequired().UseCollation("und-x-icu");
         b.Property(c => c.LegalName).HasMaxLength(Customer.LegalNameMaxLength);
         b.Property(c => c.TaxId).HasMaxLength(Customer.TaxIdMaxLength);
         b.Property(c => c.NormalizedTaxId).HasMaxLength(Customer.TaxIdMaxLength);
@@ -138,7 +140,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.Property(p => p.Sku).HasMaxLength(Product.SkuMaxLength).IsRequired();
         b.Property(p => p.NormalizedSku).HasMaxLength(Product.SkuMaxLength).IsRequired();
         b.HasIndex(p => new { p.TenantId, p.NormalizedSku }).IsUnique().HasDatabaseName("ux_products_tenant_sku");
-        b.Property(p => p.Name).HasMaxLength(Product.NameMaxLength).IsRequired();
+        b.Property(p => p.Name).HasMaxLength(Product.NameMaxLength).IsRequired().UseCollation("und-x-icu"); // see Customer.Name
         b.Property(p => p.Description).HasMaxLength(Product.DescriptionMaxLength);
         b.Property(p => p.Unit).HasMaxLength(16).IsRequired();
         b.Property(p => p.UnitPrice).HasPrecision(19, Amounts.MoneyScale);
