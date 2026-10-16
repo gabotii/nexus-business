@@ -147,3 +147,4 @@ Versiones exactas (NuGet centralizado en `Directory.Packages.props`; npm con `pa
 - Sin eliminación de cuenta ni exportación de datos personales; sin visor de auditoría (Fase 6); sin ajustes de empresa ni logo (Fase 3).
 - El bundle del SPA supera los 500 kB sin dividir por rutas; carga diferida pendiente.
 - Copias de seguridad, restauración y guía de operación: Fase 7 (`docs/OPERATIONS.md`).
+<img width="883" height="477" alt="image" src="https://github.com/user-attachments/assets/7ee14b95-0ed5-4f5d-b835-017ea6c97ee6" />
