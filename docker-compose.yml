@@ -65,8 +65,11 @@ services:
       Email__SmtpEnableSsl: ${SMTP_ENABLE_SSL:-true}
       # Session tickets and e-mail tokens are encrypted with these keys: losing them signs everybody out.
       DataProtection__KeysPath: /keys
+      # Uploaded files (company logos). Production requires an absolute path on a persistent volume.
+      Storage__RootPath: /data/files
     volumes:
       - dpkeys:/keys
+      - files:/data/files
     expose:
       - "8080"
 
@@ -103,3 +106,4 @@ services:
 volumes:
   pgdata:
   dpkeys:
+  files:

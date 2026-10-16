@@ -25,9 +25,9 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 
 COPY --from=build /app/publish .
 
-# Data Protection keys (session tickets, e-mail tokens) live on a volume mounted here; a named volume inherits this
-# ownership on first use, so the non-root user can write to it.
-RUN mkdir -p /keys && chown app:app /keys
+# Data Protection keys (session tickets, e-mail tokens) and uploaded files (company logos) live on volumes mounted
+# here; a named volume inherits this ownership on first use, so the non-root user can write to it.
+RUN mkdir -p /keys /data/files && chown app:app /keys /data/files
 
 USER app
 EXPOSE 8080
